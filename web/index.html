@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CrowdRoute · Delhi bus journey planner with crowding</title>
+<link rel="stylesheet" href="/static/vendor/leaflet.css">
+<script src="/static/vendor/leaflet.js"></script>
+<style>
+  :root{--bg:#0f1419;--panel:#171d25;--line:#2a3340;--text:#e8edf2;--muted:#8a97a6;--accent:#4cc3ff;
+        --l1:#2ecc71;--l2:#f1c40f;--l3:#e67e22;--l4:#e74c3c;--l0:#5d6b7a}
+  *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column}
+  header{display:flex;align-items:center;gap:16px;padding:10px 18px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{font-size:17px;margin:0;font-weight:700;letter-spacing:.2px} header h1 span{color:var(--accent)}
+  .tabs{margin-left:auto;display:flex;gap:6px} .tabs button{background:transparent;border:1px solid var(--line);color:var(--muted);padding:6px 14px;border-radius:999px;cursor:pointer;font-size:13px}
+  .tabs button.on{background:var(--accent);color:#06202e;border-color:var(--accent);font-weight:600}
+  main{flex:1;display:grid;grid-template-columns:400px 1fr;min-height:0}
+  aside{border-right:1px solid var(--line);background:var(--panel);overflow:auto;padding:14px}
+  #map{height:100%}
+  label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin:10px 0 4px}
+  input,select{width:100%;background:#0f141a;border:1px solid var(--line);color:var(--text);padding:9px 10px;border-radius:8px;font-size:14px}
+  .sugg{position:relative} .sugg ul{position:absolute;z-index:1000;left:0;right:0;background:#0f141a;border:1px solid var(--line);border-radius:8px;list-style:none;margin:2px 0 0;padding:4px;max-height:220px;overflow:auto;display:none}
+  .sugg li{padding:7px 8px;border-radius:6px;cursor:pointer;font-size:13px} .sugg li:hover{background:#1f2936} .sugg li small{color:var(--muted)}
+  button.go{margin-top:14px;width:100%;background:var(--accent);color:#06202e;border:0;padding:11px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer}
+  .card{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:10px;cursor:pointer;background:#121820}
+  .card.sel{border-color:var(--accent)} .card .row{display:flex;align-items:center;gap:8px}
+  .card .time{font-size:18px;font-weight:700} .card .dur{color:var(--muted);font-size:13px;margin-left:auto}
+  .pill{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:700;color:#06202e}
+  .lv1{background:var(--l1)} .lv2{background:var(--l2)} .lv3{background:var(--l3);color:#fff} .lv4{background:var(--l4);color:#fff} .lv0{background:var(--l0);color:#fff}
+  .legs{font-size:13px;color:var(--muted);margin-top:6px} .legs b{color:var(--text)}
+  .bar{display:flex;height:7px;border-radius:4px;overflow:hidden;margin-top:7px;background:#223}
+  .bar i{flex:1} .conf{font-size:11px;color:var(--muted);margin-top:5px}
+  h3{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin:18px 0 6px}
+  .tip{background:#13202a;border:1px solid #1e3a4d;border-radius:10px;padding:10px 12px;margin-top:10px;font-size:13px}
+  .tip b{color:var(--accent)}
+  table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px} td,th{padding:5px 4px;border-bottom:1px solid var(--line);text-align:left} th{color:var(--muted);font-weight:600}
+  .slider{display:flex;align-items:center;gap:10px} .slider input{flex:1;padding:0} .slider span{min-width:48px;text-align:right;font-variant-numeric:tabular-nums}
+  .legend{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;font-size:12px} .legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+  .legend .a::before{background:var(--l1)} .legend .b::before{background:var(--l2)} .legend .c::before{background:var(--l3)} .legend .d::before{background:var(--l4)}
+  .chart{height:90px;display:flex;align-items:flex-end;gap:1px;margin-top:8px;border-bottom:1px solid var(--line)} .chart i{flex:1;background:var(--accent);opacity:.75;min-height:1px} .chart i.pk{background:var(--l4)}
+  .muted{color:var(--muted);font-size:12px} .hide{display:none}
+  .leaflet-container{background:#0b0f14}
+</style>
+</head>
+<body>
+<header>
+  <h1><span>Crowd</span>Route <span style="color:var(--muted);font-weight:400;font-size:13px">· Delhi buses · crowding-aware journey planner</span></h1>
+  <div class="tabs"><button id="tabPlan" class="on">Commuter</button><button id="tabOps">Operator</button></div>
+</header>
+<main>
+<aside>
+  <section id="plan">
+    <label>From</label><div class="sugg"><input id="from" placeholder="e.g. Anand Vihar ISBT" autocomplete="off"><ul id="fromL"></ul></div>
+    <label>To</label><div class="sugg"><input id="to" placeholder="e.g. Shivaji Stadium (Connaught Place)" autocomplete="off"><ul id="toL"></ul></div>
+    <label>Leave at</label><input id="when" type="datetime-local" value="2026-10-28T18:00">
+    <button class="go" id="go">Find journeys</button>
+    <div id="results"></div>
+  </section>
+  <section id="ops" class="hide">
+    <label>Day type</label><select id="opsDay"><option value="weekday">Weekday</option><option value="saturday">Saturday</option><option value="sunday">Sunday / holiday</option></select>
+    <label>Time of day</label><div class="slider"><input id="opsBand" type="range" min="0" max="47" value="18"><span id="opsTime">09:00</span></div>
+    <label>Minimum confidence</label><select id="opsConf"><option value="medium">Medium + high</option><option value="high">High only</option><option value="low">All cells</option></select>
+    <div class="legend"><span class="a">Seats</span><span class="b">Standing</span><span class="c">Crowded</span><span class="d">Packed</span></div>
+    <h3>Network load through the day</h3><div class="chart" id="chart"></div><div class="muted">bar = mean on-board load; red = time bands where ≥10% of stretches are crowded/packed</div>
+    <h3>Most overloaded stretches at this time</h3><div id="top"></div>
+  </section>
+</aside>
+<div id="map"></div>
+</main>
+<script>
+const api = (p) => fetch(p).then(r => r.json());
+const LV = {0:'var(--l0)',1:'var(--l1)',2:'var(--l2)',3:'var(--l3)',4:'var(--l4)'};
+const map = L.map('map', {zoomControl:true}).setView([28.63, 77.22], 11);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {attribution:'© OpenStreetMap © CARTO', maxZoom:19}).addTo(map);
+let layer = L.layerGroup().addTo(map);
+const sel = {from:null, to:null};
+
+// ---------- autocomplete ----------
+function wire(inputId, listId, key){
+  const inp = document.getElementById(inputId), ul = document.getElementById(listId); let t;
+  inp.addEventListener('input', () => { clearTimeout(t); sel[key]=null; t=setTimeout(async()=>{
+    if(inp.value.length<2){ul.style.display='none';return}
+    const hits = await api('/api/stops/search?q='+encodeURIComponent(inp.value));
+    ul.innerHTML = hits.map(h=>`<li data-id="${h.stop_id}" data-lat="${h.lat}" data-lon="${h.lon}" data-name="${h.name}">${h.name}<br><small>${h.routes.slice(0,6).join(', ')}</small></li>`).join('');
+    ul.style.display='block';
+    ul.querySelectorAll('li').forEach(li=>li.onclick=()=>{sel[key]={lat:+li.dataset.lat,lon:+li.dataset.lon,name:li.dataset.name};inp.value=li.dataset.name;ul.style.display='none';});
+  },200)});
+  document.addEventListener('click', e=>{ if(!ul.contains(e.target)&&e.target!==inp) ul.style.display='none'; });
+}
+wire('from','fromL','from'); wire('to','toL','to');
+
+// ---------- planner ----------
+document.getElementById('go').onclick = async () => {
+  if(!sel.from||!sel.to){ alert('Pick a stop from the suggestions for both From and To'); return; }
+  const when = document.getElementById('when').value;
+  const res = document.getElementById('results'); res.innerHTML = '<div class="muted" style="margin-top:12px">Planning…</div>';
+  const r = await api(`/api/plan?o_lat=${sel.from.lat}&o_lon=${sel.from.lon}&d_lat=${sel.to.lat}&d_lon=${sel.to.lon}&when=${when}`);
+  if(!r.journeys.length){ res.innerHTML='<div class="tip">No bus journey found within walking distance and a 60-minute wait. Try a nearby stop.</div>'; return; }
+  res.innerHTML = `<h3>Options · ${r.daytype} ${r.requested.slice(11)}</h3>` + r.journeys.map((j,i)=>card(j,i)).join('') +
+    (r.calmer_later.length ? `<div class="tip"><b>Leave a little later?</b> ${r.calmer_later.map(a=>`+${a.shift_min} min → ${a.legs.map(l=>l.route).join(' → ')} at ${a.depart}: <b>${a.crowd_label}</b> (${a.total_min} min)`).join('<br>')}</div>` : '');
+  res.querySelectorAll('.card').forEach((c,i)=>c.onclick=()=>{res.querySelectorAll('.card').forEach(x=>x.classList.remove('sel'));c.classList.add('sel');draw(r.journeys[i]);});
+  res.querySelector('.card').classList.add('sel'); draw(r.journeys[0]);
+};
+function card(j,i){
+  const stretch = j.legs.map(l=>`<div class="bar">${l.stretch_levels.map(v=>`<i style="background:${LV[v]}"></i>`).join('')}</div>`).join('');
+  return `<div class="card"><div class="row"><span class="time">${j.depart} → ${j.arrive}</span><span class="pill lv${j.crowd_level}">${j.crowd_label}</span><span class="dur">${Math.round(j.total_min)} min</span></div>
+  <div class="legs">${j.legs.map(l=>`<b>${l.route}</b> ${l.from_name} → ${l.to_name} (${l.n_stops} stops, ${Math.round(l.in_vehicle_min)} min)`).join('<br>↳ change · ')}</div>
+  ${stretch}<div class="conf">${j.transfers?j.transfers+' change · ':''}wait ${Math.round(j.wait_min)} min · walk ${Math.round(j.walk_min)} min · ${j.crowd_lf!=null?'peak load '+Math.round(j.crowd_lf*100)+'% of seats · ':''}confidence ${j.confidence}${j.crowd_level>=3?'<br>Busiest stretch: '+j.legs.map(l=>l.crowd_max.from?l.crowd_max.from+' → '+l.crowd_max.to:'').filter(Boolean)[0]:''}</div></div>`;
+}
+function draw(j){
+  layer.clearLayers(); const all=[];
+  j.legs.forEach(l=>{ l.path.forEach((p,k)=>{ if(k<l.path.length-1){ const v=l.stretch_levels[k]??0; L.polyline([p,l.path[k+1]],{color:LV[v].startsWith('var')?getComputedStyle(document.documentElement).getPropertyValue(LV[v].slice(4,-1)).trim():LV[v],weight:6,opacity:.95}).addTo(layer);} all.push(p); });
+    L.circleMarker(l.path[0],{radius:6,color:'#fff',fillColor:'#4cc3ff',fillOpacity:1}).bindTooltip(l.from_name).addTo(layer);
+    L.circleMarker(l.path[l.path.length-1],{radius:6,color:'#fff',fillColor:'#4cc3ff',fillOpacity:1}).bindTooltip(l.to_name).addTo(layer); });
+  if(all.length) map.fitBounds(L.latLngBounds(all),{padding:[30,30]});
+}
+
+// ---------- operator ----------
+const css = (v)=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+let hourly={};
+async function ops(){
+  const day=document.getElementById('opsDay').value, band=+document.getElementById('opsBand').value, conf=document.getElementById('opsConf').value;
+  document.getElementById('opsTime').textContent = `${String(Math.floor(band/2)).padStart(2,'0')}:${band%2?'30':'00'}`;
+  const [h, top] = await Promise.all([api(`/api/crowding/heatmap?daytype=${day}&band=${band}&min_conf=${conf}`), api(`/api/crowding/top?daytype=${day}&band=${band}&limit=12`)]);
+  layer.clearLayers();
+  const order = h.segments.sort((a,b)=>a.lv-b.lv);  // draw worst last
+  order.forEach(s=>L.polyline([s.a,s.b],{color:css('--l'+s.lv),weight:s.lv>=3?4:2.5,opacity:s.lv>=3?.9:.45}).bindTooltip(`${s.r} · load ${s.load} (${Math.round(s.lf*100)}% of seats) · ${s.n} tickets`).addTo(layer));
+  document.getElementById('top').innerHTML = `<table><tr><th>Route</th><th>Stretch</th><th>Load</th><th>Buses/30m</th></tr>` + top.map(t=>`<tr><td><b>${t.route}</b></td><td>${t.from} → ${t.to}</td><td><span class="pill lv${t.label==='Packed'?4:3}">${t.load}</span></td><td>${t.buses_per_band}</td></tr>`).join('')+'</table>';
+  if(!hourly[day]){ hourly[day]=await api('/api/crowding/hourly?daytype='+day); }
+  const mx=Math.max(...hourly[day].map(x=>x.mean_load));
+  document.getElementById('chart').innerHTML = hourly[day].map(x=>`<i class="${x.crowded_share>=0.1?'pk':''}" style="height:${x.mean_load/mx*100}%" title="${x.time}: load ${x.mean_load}, ${Math.round(x.crowded_share*100)}% stretches crowded"></i>`).join('');
+}
+['opsDay','opsConf'].forEach(id=>document.getElementById(id).onchange=ops);
+document.getElementById('opsBand').oninput=()=>{clearTimeout(window._b);window._b=setTimeout(ops,120)};
+
+// ---------- tabs ----------
+document.getElementById('tabPlan').onclick=()=>{tab('plan')}; document.getElementById('tabOps').onclick=()=>{tab('ops');ops()};
+function tab(w){ ['plan','ops'].forEach(x=>{document.getElementById(x).classList.toggle('hide',x!==w)}); document.getElementById('tabPlan').classList.toggle('on',w==='plan'); document.getElementById('tabOps').classList.toggle('on',w==='ops'); layer.clearLayers(); }
+</script>
+</body>
+</html>
