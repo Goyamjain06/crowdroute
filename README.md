@@ -98,6 +98,6 @@ docs/              technical note, validation report, figures, screenshots
 
 ## Team
 
-Goyam Jain (IIIT Delhi) and team. Open-source libraries: pandas, numpy, rapidfuzz, FastAPI, Leaflet, CARTO basemap tiles. AI coding assistance was used for scaffolding and documentation; all modelling choices, calibration and validation were designed and checked by the team.
+Goyam Jain (IIIT Delhi) and team. Open-source libraries: pandas, numpy, rapidfuzz, FastAPI, Leaflet, OpenStreetMap tiles. AI coding assistance was used for scaffolding and documentation; all modelling choices, calibration and validation were designed and checked by the team.
 
 License: MIT.
