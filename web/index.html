@@ -72,7 +72,13 @@
 const api = (p) => fetch(p).then(r => r.json());
 const LV = {0:'var(--l0)',1:'var(--l1)',2:'var(--l2)',3:'var(--l3)',4:'var(--l4)'};
 const map = L.map('map', {zoomControl:true}).setView([28.63, 77.22], 11);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution:'© OpenStreetMap contributors', maxZoom:19, className:'dark-tiles'}).addTo(map);
+// Primary: Stadia "Alidade Smooth Dark" (free on localhost; register a free key at stadiamaps.com for a public deployment).
+// Fallback: OpenStreetMap with a dark CSS filter if Stadia tiles fail to load.
+const stadia = L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png', {attribution:'© Stadia Maps © OpenMapTiles © OpenStreetMap contributors', maxZoom:20});
+const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution:'© OpenStreetMap contributors', maxZoom:19, className:'dark-tiles'});
+let tileFails = 0;
+stadia.on('tileerror', () => { if (++tileFails === 3 && map.hasLayer(stadia)) { map.removeLayer(stadia); osm.addTo(map); } });
+stadia.addTo(map);
 let layer = L.layerGroup().addTo(map);
 const sel = {from:null, to:null};
 
@@ -110,7 +116,7 @@ function card(j,i){
 }
 function draw(j){
   layer.clearLayers(); const all=[];
-  j.legs.forEach(l=>{ l.path.forEach((p,k)=>{ if(k<l.path.length-1){ const v=l.stretch_levels[k]??0; L.polyline([p,l.path[k+1]],{color:LV[v].startsWith('var')?getComputedStyle(document.documentElement).getPropertyValue(LV[v].slice(4,-1)).trim():LV[v],weight:6,opacity:.95}).addTo(layer);} all.push(p); });
+  j.legs.forEach(l=>{ l.path.forEach((p,k)=>{ if(k<l.path.length-1){ const v=l.stretch_levels[k]??0; L.polyline([p,l.path[k+1]],{color:LV[v].startsWith('var')?getComputedStyle(document.documentElement).getPropertyValue(LV[v].slice(4,-1)).trim():LV[v],weight:7,opacity:1}).addTo(layer);} all.push(p); });
     L.circleMarker(l.path[0],{radius:6,color:'#fff',fillColor:'#4cc3ff',fillOpacity:1}).bindTooltip(l.from_name).addTo(layer);
     L.circleMarker(l.path[l.path.length-1],{radius:6,color:'#fff',fillColor:'#4cc3ff',fillOpacity:1}).bindTooltip(l.to_name).addTo(layer); });
   if(all.length) map.fitBounds(L.latLngBounds(all),{padding:[30,30]});
@@ -125,7 +131,7 @@ async function ops(){
   const [h, top] = await Promise.all([api(`/api/crowding/heatmap?daytype=${day}&band=${band}&min_conf=${conf}`), api(`/api/crowding/top?daytype=${day}&band=${band}&limit=12`)]);
   layer.clearLayers();
   const order = h.segments.sort((a,b)=>a.lv-b.lv);  // draw worst last
-  order.forEach(s=>L.polyline([s.a,s.b],{color:css('--l'+s.lv),weight:s.lv>=3?4:2.5,opacity:s.lv>=3?.9:.45}).bindTooltip(`${s.r} · load ${s.load} (${Math.round(s.lf*100)}% of seats) · ${s.n} tickets`).addTo(layer));
+  order.forEach(s=>L.polyline([s.a,s.b],{color:css('--l'+s.lv),weight:s.lv>=3?5:3,opacity:s.lv>=3?.95:.6}).bindTooltip(`${s.r} · load ${s.load} (${Math.round(s.lf*100)}% of seats) · ${s.n} tickets`).addTo(layer));
   document.getElementById('top').innerHTML = `<table><tr><th>Route</th><th>Stretch</th><th>Load</th><th>Buses/30m</th></tr>` + top.map(t=>`<tr><td><b>${t.route}</b></td><td>${t.from} → ${t.to}</td><td><span class="pill lv${t.label==='Packed'?4:3}">${t.load}</span></td><td>${t.buses_per_band}</td></tr>`).join('')+'</table>';
   if(!hourly[day]){ hourly[day]=await api('/api/crowding/hourly?daytype='+day); }
   const mx=Math.max(...hourly[day].map(x=>x.mean_load));
